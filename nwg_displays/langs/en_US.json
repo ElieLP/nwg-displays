@@ -30,5 +30,7 @@
   "view-scale-tooltip": "Outputs preview scale",
   "workspaces": "Workspaces",
   "workspaces-tooltip": "Opens Workspace -> Output assignment popup.",
-  "zoom": "Zoom"
+  "zoom": "Zoom",
+  "create_profile": "Create profile",
+  "update-hyprland-config": "Update hyprland.conf"
 }

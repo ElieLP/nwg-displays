@@ -30,5 +30,7 @@
   "view-scale-tooltip": "Zvětšit náhled výstupu",
   "workspaces": "Pracovní plochy",
   "workspaces-tooltip": "Otevřít Pracovní plochu -> Vyskakovací okno přiřazení k výstupům.",
-  "zoom": "Zvětšení"
+  "zoom": "Zvětšení",
+  "create_profile": "Vytvořit profil",
+  "update-hyprland-config": "Aktualizovat hyprland.conf"
 }

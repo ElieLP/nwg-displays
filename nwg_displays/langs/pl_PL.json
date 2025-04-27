@@ -30,5 +30,7 @@
   "view-scale-tooltip": "Powiększenie podglądu wyjść",
   "workspaces": "Obszary robocze",
   "workspaces-tooltip": "Otwiera dialog przyporządkowania\nobszarów roboczych do wyjść.",
-  "zoom": "Powiększenie"
+  "zoom": "Powiększenie",
+  "create_profile": "Utwórz profil",
+  "update-hyprland-config": "Aktualizuj hyprland.conf"
 }

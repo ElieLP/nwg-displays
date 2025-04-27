@@ -16,6 +16,9 @@ Thank you, Kurt Jacobson!
 import argparse
 import os.path
 import sys
+import re
+import subprocess
+import datetime
 
 import gi
 
@@ -537,6 +540,10 @@ def on_mirror_selected(widget):
 
 def on_apply_button(widget):
     global outputs_activity
+    if form_generate_monitors_profile.get_active():
+        outputs_path = create_monitor_config()
+        notify("Profile generated", f"Monitor config: {outputs_path}")
+        eprint(f"Profile generated:\nMonitor config: {outputs_path}")
     apply_settings(display_buttons, outputs_activity, outputs_path, use_desc=config["use-desc"])
     # save config file
     save_json(config, os.path.join(config_dir, "config"))
@@ -726,6 +733,16 @@ def create_workspaces_window_hypr(btn):
     box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     grid.attach(box, 0, last_row + 1, 2, 1)
 
+    global form_generate_workspaces_profile
+    form_generate_workspaces_profile = Gtk.CheckButton.new_with_label(voc["create_profile"])
+    form_generate_workspaces_profile.set_tooltip_text("Generate workspace profile using current configuration")
+    grid.attach(form_generate_workspaces_profile, 0, last_row + 1, 1, 1)
+
+    global form_update_workspaces_hyprland_config
+    form_update_workspaces_hyprland_config = Gtk.CheckButton.new_with_label(voc["update-hyprland-config"])
+    form_update_workspaces_hyprland_config.set_tooltip_text("Update hyprland.conf to use the provided workspace config file")
+    grid.attach(form_update_workspaces_hyprland_config, 1, last_row + 1, 1, 1)
+
     btn_apply = Gtk.Button()
     btn_apply.set_label(voc["apply"])
     if hypr_config_dir:
@@ -763,8 +780,13 @@ def on_workspaces_apply_btn(w, win, old_workspaces):
 
 def on_workspaces_apply_btn_hypr(w, win, old_workspaces):
     global workspaces
+    
     if workspaces != old_workspaces:
-        workspace_conf_file = workspaces_path
+        if form_generate_workspaces_profile.get_active():
+            workspace_conf_file = create_workspace_config()
+        else:
+            workspace_conf_file = workspaces_path
+
         text_file = open(workspace_conf_file, "w")
 
         now = datetime.datetime.now()
@@ -789,6 +811,9 @@ def on_workspaces_apply_btn_hypr(w, win, old_workspaces):
 
         text_file.close()
         notify("Workspaces assignment", "Restart Hyprland for changes to take effect")
+
+        if form_update_workspaces_hyprland_config.get_active():
+            update_workspaces_hyprland_config(workspace_conf_file)
 
     close_dialog(w, win)
 
@@ -900,11 +925,125 @@ def apply_settings(display_buttons, outputs_activity, outputs_path, use_desc=Fal
         for line in lines:
             print(line)
 
+        if form_update_monitors_hyprland_config.get_active():
+            update_monitors_hyprland_config(outputs_path)
+
         backup = []
         if os.path.isfile(outputs_path):
             backup = load_text_file(outputs_path).splitlines()
         save_list_to_text_file(lines, outputs_path)
         create_confirm_win(backup, outputs_path)
+
+def generate_hypr_config_filename():
+    """
+    Generate a config filename by concatenating sanitized monitor descriptions.
+    """
+    outputs = list_outputs()
+    descriptions = []
+    for info in outputs.values():
+        desc = info.get("description", "")
+        if desc:
+            descriptions.append(desc)
+    filename = ""
+    for desc in descriptions:
+        clean_desc = re.sub(r'[^a-zA-Z0-9_+]', '', desc.replace(' ', '_'))
+        if filename:
+            filename += f"_{clean_desc}"
+        else:
+            filename = clean_desc
+    return filename
+
+
+def create_monitor_config():
+    """
+    Write monitor config file using the generated filename.
+    """
+    output_dir = os.path.expanduser("~/.config/hypr/monitors_configs")
+    os.makedirs(output_dir, exist_ok=True)
+    config_file = generate_hypr_config_filename()
+    monitors_config_file = f"monitors_{config_file}.conf"
+    monitors_path = os.path.join(output_dir, monitors_config_file)
+
+    # Use the existing logic to write configs
+    return monitors_path
+
+
+def create_workspace_config():
+    """
+    Write workspace config file using the generated filename.
+    """
+    output_dir = os.path.expanduser("~/.config/hypr/monitors_configs")
+    os.makedirs(output_dir, exist_ok=True)
+    config_file = generate_hypr_config_filename()
+    workspaces_config_file = f"workspaces_{config_file}.conf"
+    workspaces_path = os.path.join(output_dir, workspaces_config_file)
+
+    return workspaces_path
+
+
+def update_workspaces_hyprland_config(workspaces_config_path):
+    """
+    Update hyprland.conf to use the provided workspace config file.
+    """
+    hyprland_conf = os.path.expanduser("~/.dotfiles/.config/hypr/hyprland.conf")
+    if not os.path.isfile(hyprland_conf):
+        eprint(f"Error: Hyprland config file not found at {hyprland_conf}")
+        return False
+    with open(hyprland_conf, "r") as f:
+        content = f.read()
+    # Replace the source lines
+    workspaces_pattern = r"source\s*=\s*~/.config/hypr/monitors_configs/workspaces_[^ ]+\.conf"
+    new_workspaces_line = f"source = {workspaces_config_path.replace(os.path.expanduser('~'), '~')}"
+    content, n1 = re.subn(workspaces_pattern, new_workspaces_line, content)
+    with open(hyprland_conf, "w") as f:
+        f.write(content)
+    eprint(f"Updated Hyprland config to use {workspaces_config_path}")
+    return True
+
+
+def update_monitors_hyprland_config(monitors_config_path):
+    """
+    Update hyprland.conf to use the provided monitor config file.
+    """
+    hyprland_conf = os.path.expanduser("~/.dotfiles/.config/hypr/hyprland.conf")
+    if not os.path.isfile(hyprland_conf):
+        eprint(f"Error: Hyprland config file not found at {hyprland_conf}")
+        return False
+    with open(hyprland_conf, "r") as f:
+        content = f.read()
+    # Replace the source lines
+    monitors_pattern = r"source\s*=\s*~/.config/hypr/monitors_configs/monitors_[^ ]+\.conf"
+    new_monitors_line = f"source = {monitors_config_path.replace(os.path.expanduser('~'), '~')}"
+    content, n1 = re.subn(monitors_pattern, new_monitors_line, content)
+    with open(hyprland_conf, "w") as f:
+        f.write(content)
+    eprint(f"Updated Hyprland config to use {monitors_config_path}")
+    return True
+
+
+def reload_hyprland():
+    """
+    Reload Hyprland configuration.
+    """
+    try:
+        subprocess.run(["hyprctl", "reload"], check=True)
+        print("Reloaded Hyprland configuration.")
+    except Exception as e:
+        print(f"Failed to reload Hyprland: {e}")
+
+
+def configure_and_use_hyprland_configs():
+    """
+    Full workflow: generate configs, update hyprland.conf, reload Hyprland.
+    """
+    monitors_path, workspaces_path = write_monitor_workspace_configs()
+    if update_hyprland_conf(monitors_path, workspaces_path):
+        reload_hyprland()
+    else:
+        # Fallback to default config
+        default_config = os.path.expanduser("~/.config/hypr/monitors_configs/default.conf")
+        update_hyprland_conf(default_config)
+
 
 def create_confirm_win(backup, path):
     global confirm_win
@@ -1233,6 +1372,17 @@ def main():
         form_workspaces.connect("clicked", create_workspaces_window)
     elif hypr:
         form_workspaces.connect("clicked", create_workspaces_window_hypr)
+
+    global form_generate_monitors_profile
+    form_generate_monitors_profile = Gtk.CheckButton.new_with_label(voc["create_profile"])
+    form_generate_monitors_profile.set_tooltip_text("Generate monitor profile using current configuration")
+
+    form_wrapper_box.pack_end(form_generate_monitors_profile, False, False, 3)
+    
+    global form_update_monitors_hyprland_config
+    form_update_monitors_hyprland_config = Gtk.CheckButton.new_with_label(voc["update-hyprland-config"])
+    form_update_monitors_hyprland_config.set_tooltip_text("Update hyprland.conf to use the generated monitor and workspace config files")
+    form_wrapper_box.pack_end(form_update_monitors_hyprland_config, False, False, 3)
 
     global form_close
     form_close = builder.get_object("close")
